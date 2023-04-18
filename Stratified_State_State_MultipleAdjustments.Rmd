@@ -1,0 +1,166 @@
+---
+title: "MultipleAdj"
+output: html_document
+date: "2023-03-22"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) 
+```
+
+
+```{r}
+library(pacman) 
+p_load("here", "devtools", "dplyr", "scales", "ellipse", "ggplot2", "lazyeval", "igraph", "truncnorm", "ggraph", "reshape2", "knitr", "markdown", "stringr","readxl", "plyr","readr","data.table", "tidyr", "zoo", "lubridate", "ggpubr", "purrr", "forestplot", "grid", "forestploter", "broom")
+ setwd("C:/Users/cu888/Dropbox (Partners HealthCare)/Harvard/Projects/CEA_PrescriptionOpioid/PrescribingPolicies_Analysis/GeospatialAnalysis/Racial_Disparities")
+```
+
+
+
+# regression to get coefficients
+```{r}
+dat<-fread("49_states.csv")
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+glmfunction_coef = function(x)
+{
+    result=glm(abrupt ~ race_rev+age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    COEFF=summary(result)$coefficients
+    out=as.data.frame(COEFF)
+    return(out)
+}
+
+
+out_coeff=by(dat,dat$state,glmfunction_coef)
+out_coeff2 <-  as.data.frame(do.call(rbind, out_coeff))
+
+#calculate multiple adjustments for p-value
+
+out_coeff2$Bonferroni = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "bonferroni")
+
+out_coeff2$BH = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "BH")
+
+out_coeff2$holm = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "holm")
+
+out_coeff2$Hochberg = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "hochberg")
+
+out_coeff2$Hommel = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "hommel")
+
+#fwrite(out_coeff2,"multiple_tests_padjust.csv")
+
+#convert row label into column
+out_coeff2<- setDT(out_coeff2, keep.rownames = TRUE)[]
+
+#split state and covariate
+state_covariate<-data.frame(do.call('rbind', strsplit(as.character(out_coeff2$rn),'.',fixed=TRUE)))
+
+#state_covariate<- subset(state_covariate, select = -c(X3) )
+colnames(state_covariate)[colnames(state_covariate) == "X1"] ="State"
+colnames(state_covariate)[colnames(state_covariate) == "X2"] ="Covariate"
+colnames(out_coeff2)[colnames(out_coeff2) == 'Pr(>|z|)'] ="pvalue"
+
+#merge dataframes and keep final values
+final_coeff<- cbind(state_covariate, out_coeff2)  
+final_coeff_multiple<-subset(final_coeff, select = c(State, Covariate, pvalue, Bonferroni, BH, holm, Hochberg, Hommel ) )
+fwrite(final_coeff_multiple,"final_coeff_multiple.csv")
+
+```
+
+
+#get OR
+```{r}
+glmfunction_OR = function(x)
+{
+    result=glm(abrupt ~ race_rev+age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    OR=exp(cbind("Odds ratio" = coef(result), confint.default(result, level = 0.95)))
+    out=as.data.frame(OR)
+    return(out)
+}
+
+
+out_OR=by(dat,dat$state,glmfunction_OR)
+out_OR2 <-  as.data.frame(do.call(rbind, out_OR))
+
+# #calculate multiple adjustments for CI
+# out_OR2$left_Bonferroni = p.adjust(out_OR2$`2.5 %`,
+#                method = "bonferroni")
+# 
+# out_OR2$right_Bonferroni = p.adjust(out_OR2$`97.5 %`,
+#                method = "bonferroni")
+
+#convert row label into column
+out_OR2<- setDT(out_OR2, keep.rownames = TRUE)[]
+
+#split state and covariate
+state_covariate<-data.frame(do.call('rbind', strsplit(as.character(out_OR2$rn),'.',fixed=TRUE)))
+
+#state_covariate<- subset(state_covariate, select = -c(X3) )
+#colnames(state_covariate)[colnames(state_covariate) == "X1"] ="State"
+#colnames(state_covariate)[colnames(state_covariate) == "X2"] ="Covariate"
+
+colnames(out_OR2)[colnames(out_OR2) == "Odds ratio"] ="OR"
+colnames(out_OR2)[colnames(out_OR2) == "2.5 %"] ="left"
+colnames(out_OR2)[colnames(out_OR2) == "97.5 %"] ="right"
+
+
+#merge dataframes and keep final values
+final_OR<- cbind(state_covariate, out_OR2)  
+#final_OR<-subset(final_OR, select = c(State, Covariate, OR, left, right))
+# 
+# write.csv(final_OR,"OR_Nov14.csv", row.names=FALSE)
+# 
+# final_coeff_or<-merge(final_coeff, final_OR, by=c("State", "Covariate"))
+# fwrite(final_coeff_or,"Coeff_OR_multipleadj_Nov14.csv")
+
+```
+
+
+#multiple adjustments for CI 
+```{r}
+glmfunction_OR2 = function(x)
+{
+    result=glm(abrupt ~ race_rev+age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    conf_b<-confint_adjust(result,method="b")
+    out=as.data.frame(conf_b)
+    return(out)
+}
+
+out_confb=by(dat,dat$state,glmfunction_OR2)
+out_confb2<-  as.data.frame(do.call(rbind, out_confb))
+
+#convert row label into column
+out_confb2<- setDT(out_confb2, keep.rownames = TRUE)[]
+
+#split state and covariate
+state_covariate2<-data.frame(do.call('rbind', strsplit(as.character(out_confb2$rn),'.',fixed=TRUE)))
+
+#state_covariate2<- subset(state_covariate2, select = -c(X3) )
+colnames(state_covariate2)[colnames(state_covariate2) == "X1"] ="State"
+colnames(state_covariate2)[colnames(state_covariate2) == "X2"] ="Covariate"
+
+colnames(out_confb2)[colnames(out_confb2) == "lwr"] ="adjusted_left"
+colnames(out_confb2)[colnames(out_confb2) == "upr"] ="adjusted_right"
+
+#merge dataframes and keep final values
+final_OR_co<- cbind(state_covariate2, out_coeff2, out_OR2,out_confb2)  
+final_OR_co<-subset(final_OR_co, select = c(State, Covariate,  pvalue, Bonferroni, BH, holm, Hochberg, Hommel, OR, left, right, left_bonferroni, right_bonferroni) )
+
+fwrite(final_OR_co,"Final_Coeff_OR_multipleadj_March22.csv")
+
+```
