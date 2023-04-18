@@ -1,0 +1,604 @@
+---
+title: "MME trajectories"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) 
+```
+
+
+```{r}
+library(pacman) 
+p_load("devtools", "dplyr", "scales", "ellipse", "ggplot2", "lazyeval", "igraph", "truncnorm", "ggraph", "reshape2", "knitr", "markdown", "stringr","readxl", "plyr","readr","data.table", "tidyr", "zoo", "lubridate")
+setwd("C:/Users/cu888/Dropbox (Partners HealthCare)/Harvard/Projects/CEA_PrescriptionOpioid/PrescribingPolicies_Analysis/GeospatialAnalysis/Racial_Disparities")
+```
+
+
+## data preparation and formating for MME trajectories
+```{r}
+#load the data
+
+#df_data<-fread("Mini_time_segment.csv")
+df_data_long_high<-fread("L90H14days.csv")
+length(unique(df_data_long_high$PATIENT_ID))
+#90 -> 203981 unique patients
+# 14 -> 412023
+episode<-aggregate(df_data_long_high$episode.ID, by=list(df_data_long_high$episode.ID,df_data_long_high$PATIENT_ID ), FUN=length)
+nrow(episode) 
+#90 -> 245789 episodes
+#14-> 551458
+
+```
+
+
+```{r}
+
+#create age groups
+df_data_long_high<-df_data_long_high %>%
+   mutate(age = case_when(PAT_BRTH_YR_NBR==2003 ~ "18-34",
+                          PAT_BRTH_YR_NBR==2002 ~ "18-34",
+                          PAT_BRTH_YR_NBR==2001 ~ "18-34",
+                          PAT_BRTH_YR_NBR==2000 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1999 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1998 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1997 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1996 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1995 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1994 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1993 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1992 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1991 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1990 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1989 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1988 ~ "18-34",
+                          PAT_BRTH_YR_NBR==1987 ~ "18-34",
+                          
+                          PAT_BRTH_YR_NBR==1986 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1985 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1984 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1983 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1982 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1981 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1980 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1979 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1978 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1977 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1976 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1975 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1974 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1973 ~ "35-49",
+                          PAT_BRTH_YR_NBR==1972 ~ "35-49",
+                          
+                          PAT_BRTH_YR_NBR==1971 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1970 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1969 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1968 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1967 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1966 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1965 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1964 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1963 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1962 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1961 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1960 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1959 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1958 ~ "50-64",
+                          PAT_BRTH_YR_NBR==1957 ~ "50-64",
+                          
+                          PAT_BRTH_YR_NBR==1956 ~ "65+",
+                          PAT_BRTH_YR_NBR==1955 ~ "65+",
+                          PAT_BRTH_YR_NBR==1954 ~ "65+",
+                          PAT_BRTH_YR_NBR==1953 ~ "65+",
+                          PAT_BRTH_YR_NBR==1952 ~ "65+",
+                          PAT_BRTH_YR_NBR==1951 ~ "65+",
+                          PAT_BRTH_YR_NBR==1950 ~ "65+",
+                          PAT_BRTH_YR_NBR==1949 ~ "65+",
+                          PAT_BRTH_YR_NBR==1948 ~ "65+",
+                          PAT_BRTH_YR_NBR==1947 ~ "65+",
+                          PAT_BRTH_YR_NBR==1946 ~ "65+",
+                          PAT_BRTH_YR_NBR==1945 ~ "65+",
+                          PAT_BRTH_YR_NBR==1944 ~ "65+",
+                          PAT_BRTH_YR_NBR==1943 ~ "65+",
+                          PAT_BRTH_YR_NBR==1942 ~ "65+",
+                          PAT_BRTH_YR_NBR==1941 ~ "65+",
+                          PAT_BRTH_YR_NBR==1940 ~ "65+",
+                          PAT_BRTH_YR_NBR==1939 ~ "65+",
+                          PAT_BRTH_YR_NBR==1938 ~ "65+",
+                          PAT_BRTH_YR_NBR==1937 ~ "65+",
+                          PAT_BRTH_YR_NBR==1936 ~ "65+",
+                        
+                            TRUE ~ "<18"))
+
+names(df_data_long_high)[names(df_data_long_high) == 'PAT_ETHNICITY'] <- 'race'
+
+# #merge race groups white and non-white (hispanic+asian+black)
+# df_data_long_high<-df_data_long_high %>%
+#    mutate(race = case_when(PAT_ETHNICITY=="WHITE" ~ "WHITE",
+#                           PAT_ETHNICITY=="HISPANIC" ~ "NO-WHITE",
+#                           PAT_ETHNICITY=="BLACK" ~ "NO-WHITE",
+#                           PAT_ETHNICITY=="ASIAN - OTHER" ~ "NO-WHITE",
+#                             TRUE ~ "other"))
+```
+
+##MMEs 
+```{r}
+#df_data_long_high$MME [df_data_long_high$MME == 1] <- 0
+
+df_data_long_high[is.na(df_data_long_high)] <- 0
+
+#round to the nearest value
+#df_data_long_high$MME<-round_any(df_data_long_high$DMME.time.segment, 10, f = ceiling)
+names(df_data_long_high)[names(df_data_long_high) == 'DMME.time.segment'] <- 'MME'
+
+#sort dataframe so first DMME becomes last DMME
+df_data_long_high <- df_data_long_high[order(PATIENT_ID, episode.ID, split_start_date),]
+
+#rolling average
+roll <- function(x, n) { 
+  if (length(x) <= n) NA 
+  else rollapply(x, list(-seq(n)+1), mean, fill = NA)
+}
+
+df_data_long_high<-transform(df_data_long_high, rolling_average= ave(MME, PATIENT_ID,episode.ID,  FUN = function(x) roll(x, 2)))
+
+ra<-df_data_long_high %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   summarise_at(vars(rolling_average), list(last_three_ra = last),na.rm = T)
+
+df_data_long_high<-full_join(df_data_long_high, ra)
+df_data_long_high <- subset(df_data_long_high, select = -c(rolling_average) )
+
+
+#total DMMEs per episode
+MME_episode<-df_data_long_high %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   summarise_at(vars(MME), list(total_MME = sum),na.rm = T)
+
+df_data_long_high<-full_join(df_data_long_high, MME_episode)
+
+
+#DMME of the last segment
+MME_last<-df_data_long_high %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   summarise_at(vars(MME), list(last_MME = last),na.rm = T)
+
+df_data_long_high<-full_join(df_data_long_high, MME_last)
+
+
+#number of DMME with 90 of higher
+fun<-function(x){
+  sum(x>=90)
+}
+MME_high<-aggregate(df_data_long_high$MME, by=list(df_data_long_high$PATIENT_ID, df_data_long_high$episode.ID), FUN=function(x) fun(x))
+colnames(MME_high) <- c('PATIENT_ID','episode.ID','MME_High')
+
+df_data_long_high<-full_join(df_data_long_high, MME_high)
+
+
+
+MME_length<-df_data_long_high %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   tally()
+colnames(MME_length) <- c('PATIENT_ID','episode.ID','seg_length')
+
+df_data_long_high<-full_join(df_data_long_high, MME_length)
+
+#first DMME of the episodes (in 30 days segment)
+MME_first<-df_data_long_high %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   summarise_at(vars(MME), list(first_MME = first),na.rm = T)
+
+df_data_long_high<-full_join(df_data_long_high, MME_first)
+
+
+#total number of pills
+#df_data_long_high$total_pills<- df_data_long_high$total_MME/10*30
+
+#find previous to last MME
+previous_to_last<-df_data_long_high %>% group_by(PATIENT_ID,episode.ID) %>%
+  dplyr::mutate(previous_to_last = dplyr::lag(MME, n = 1, default = NA)) %>% 
+  as.data.frame()
+
+previous_to_last2<-previous_to_last %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   summarise_at(vars(previous_to_last), list(previous_to_last2 = last),na.rm = T)
+
+df_data_long_high<-full_join(previous_to_last, previous_to_last2)
+
+df_data_long_high<-df_data_long_high[ , -which(names(df_data_long_high) %in% c("previous_to_last"))]
+
+
+##number of days in high dosage per episode (>90MME)
+df_data_long_high$days_high<-ifelse(df_data_long_high$MME>=90,1,0)
+
+df_data_long_high$days_high2<-df_data_long_high$split_duration*df_data_long_high$days_high
+
+days_high<-df_data_long_high %>%
+group_by(PATIENT_ID,episode.ID) %>% 
+   summarise_at(vars(days_high2), list(total_days_high = sum),na.rm = T)
+
+df_data_long_high<-full_join(df_data_long_high, days_high)
+
+
+```
+
+###MME classification
+```{r}
+
+#note: rolling average updated for two-month rolling average (11/3)
+#define level >=60 or <60
+df_data_long_high$level<- ifelse(df_data_long_high$last_MME>=60, "60", "1-60")
+
+#abrupt1 --> last MME >=60
+df_data_long_high$abrupt1<- ifelse(df_data_long_high$last_MME>=60, "yes", "no")
+
+
+#abrupt2<- for 1-60 --> the dose change between the last 30 days to the previous months is between 30-60MME and the dose change between the last 30 days to the last 3-month rolling average prior to discontinuation is between 30-60
+#df_data_long_high$abrtup2<- ifelse(df_data_long_high$last_MME<60 & df_data_long_high$previous_to_last2 - df_data_long_high$last_MME>30 & df_data_long_high$previous_to_last2 - df_data_long_high$last_MME<60 & df_data_long_high$last_three_ra - df_data_long_high$last_MME >30 & df_data_long_high$last_three_ra - df_data_long_high$last_MME <60, "yes", "no")
+
+#abrupt3 <- 1-60 --> 3month rolling average >60
+df_data_long_high$abrtup3<- ifelse(df_data_long_high$last_MME<60 & df_data_long_high$last_three_ra >=60, "yes", "no" )
+
+#abrupt3 <- 1-60 --> 3month rolling average >60
+#df_data_long_high$abrtup3<- ifelse(df_data_long_high$last_MME<60 & df_data_long_high$previous_to_last2 >=60, "yes", "no" )
+
+
+#gradual --> last MME over the last 30 days was between 10-34% lower than the MME in the previous 30 days
+df_data_long_high$gradual1<-ifelse((df_data_long_high$previous_to_last2- df_data_long_high$last_MME)/ df_data_long_high$previous_to_last2*100>10 & (df_data_long_high$previous_to_last2- df_data_long_high$last_MME)/ df_data_long_high$previous_to_last2*100<34, "yes","no" )
+
+#gradual 2 --> 1-60 --> 3month rolling average < 60
+df_data_long_high$gradual2 <- ifelse(df_data_long_high$last_MME<60 & df_data_long_high$last_three_ra <60, "yes", "no" )
+
+#gradual 2 --> 1-60 --> 3month rolling average < 60
+#df_data_long_high$gradual2 <- ifelse(df_data_long_high$last_MME<60 & df_data_long_high$previous_to_last2 <60, "yes", "no" )
+
+#gradual 3 --> 1-60 --> last MME = previous to last MME
+df_data_long_high$gradual3 <- ifelse(df_data_long_high$last_MME<60 & df_data_long_high$previous_to_last2 == df_data_long_high$last_MME, "yes", "no" )
+
+
+
+#classification
+df_data_long_high$classification<- ifelse(df_data_long_high$gradual1== "yes", "gradual discontinue", 
+                                          ifelse(df_data_long_high$gradual1=="no" & df_data_long_high$abrupt1=="yes", "abrupt discontinue", 
+                                                 ifelse( df_data_long_high$gradual2 == "yes","gradual discontinue",
+                                                         ifelse(df_data_long_high$gradual3 == "yes","gradual discontinue",
+                                                         ifelse (df_data_long_high$abrtup3 == "yes","abrupt discontinue", "NA" )))))
+
+#classification
+#df_data_long_high$classification<-ifelse(df_data_long_high$gradual1=="no" & df_data_long_high$abrupt1=="yes", "abrupt discontinue", "gradual discontinued") 
+
+table(df_data_long_high$classification) 
+
+df_data_long_high$per_reduction<-(df_data_long_high$previous_to_last2 - df_data_long_high$last_MME)/ df_data_long_high$previous_to_last2*100
+
+df_data_long_high$reduction<-ifelse(df_data_long_high$previous_to_last2>df_data_long_high$last_MME, "yes", "no")
+reduction<-as.data.frame(df_data_long_high[df_data_long_high$reduction == "yes", ])
+reduction$percentage_reduction2<-(reduction$previous_to_last2 - reduction$last_MME)/ reduction$previous_to_last2*100
+summary(reduction$percentage_reduction2)
+
+#fwrite(df_data_long_high, "trajectories_classification_long_L90H14day_Dec13.csv") 
+
+```
+
+
+## change format from long to wide
+
+```{r}
+#format data to transform from wide to long format
+df_data_long_high$index <- paste(df_data_long_high$PATIENT_ID, "_", df_data_long_high$episode.ID,"_",df_data_long_high$age,"_",df_data_long_high$race,"_",df_data_long_high$PAT_GENDER_CD,"_",df_data_long_high$last_three_ra,"_",df_data_long_high$total_MME, "_", df_data_long_high$episode.start, "_", df_data_long_high$last_MME, "_", df_data_long_high$MME_High, "_", df_data_long_high$seg_length, "_", df_data_long_high$first_MME, "_", df_data_long_high$total_pills, "_", df_data_long_high$previous_to_last2, "_",df_data_long_high$level, "_", df_data_long_high$abrupt1,"_", df_data_long_high$abrtup3, "_" ,df_data_long_high$gradual1, "_", df_data_long_high$classification, "_", df_data_long_high$episode.end, "_", df_data_long_high$total_days_high, "_", df_data_long_high$per_reduction)
+
+df_data_long_high<-df_data_long_high %>%
+  dplyr::select(index,seq, MME)
+
+df_data_long_high_longformat<-reshape(df_data_long_high, idvar = "index", timevar = "seq", direction = "wide")
+
+#long term high dose (LTHD)
+LTHD<-df_data_long_high_longformat %>%
+  separate(index, c("PATIENT_ID", "episode.ID", "age", "race","gender","rolling","total_MME","episode.start", "last_MME", "high_MME", "seg_length", "first_MME", "total_pills", "previous_to_last2", "level", "abrupt1","abrtup3", "gradual1", "classification", "episode.end", "total_days_high", "percentage_reduction"), "_")
+
+as.data.table(LTHD)
+#LTHD[is.na(LTHD)] <- 0
+length(unique(LTHD$PATIENT_ID)) 
+nrow(LTHD) 
+
+summary<-table(LTHD$classification)
+print(summary)
+
+fwrite(LTHD, "classification_NOrolling.csv")
+
+#fwrite(LTHD,"trajectories_classification_wide_L90H14day_Dec13.csv")
+#fwrite(LTHD,"LTHD.csv")
+
+length(unique(LTHD$PATIENT_ID))
+episode_len1<-aggregate(LTHD$episode.ID, by=list(LTHD$episode.ID,LTHD$PATIENT_ID ), FUN=length)
+nrow(episode_len1)
+
+
+#reduction
+
+
+
+
+```
+
+
+##### match with zipcode information #####
+
+```{r}
+#90L90H
+#number of patients: 203,981
+#number of episodes: 245,789
+
+#90L14H
+#number of patients: 412,023
+#number of episodes: 551,458
+
+#status quo
+status_quo<-fread("trajectories_classification_wide_L90H14day_Dec13.csv")
+
+abrupt<-as.data.frame(status_quo[status_quo$classification == "abrupt discontinue", ])
+nrow(abrupt)
+#90->192792
+#14 -> 401599
+length(unique(abrupt$PATIENT_ID))
+#90->161934
+#14 -> 303334
+
+percentage_abrupt=nrow(abrupt)/nrow(status_quo)*100
+#90->78.50%
+#14->72.82%
+
+#number patients
+length(unique(status_quo$PATIENT_ID))
+#number episodes
+episode_len1<-aggregate(status_quo$episode.ID, by=list(status_quo$episode.ID,status_quo$PATIENT_ID ), FUN=length)
+nrow(episode_len1)
+
+
+#list patient ID
+list_patient=unique(status_quo$PATIENT_ID)
+```
+
+#fix zipcodes
+```{r}
+
+# Read in zip code with state info
+zipstateall = fread("Zip3 State.txt")
+
+# Add leading 0s
+zipstateall$PAT_ZIP3.rev = str_pad(zipstateall$ZIP3, 3, pad = "0")
+zipstateall=zipstateall[,c("state","PAT_ZIP3.rev")]
+
+```
+
+#read data with zipcodes and patient info
+
+```{r}
+patient_data<-fread("RX_opioids_zip.chnl.pay_2014_2021.csv")
+demographics<- patient_data %>%
+  dplyr::select("PATIENT_ID", "SVC_DT", "PAT_ZIP3" )
+demographics$SVC_DT_date = format(ymd(demographics$SVC_DT), "%Y-%m-%d")
+
+zipcodes_cohort<-demographics[PATIENT_ID %in% list_patient]
+length(unique(zipcodes_cohort$PATIENT_ID))
+#90->203981
+#14-> 412023
+
+#remove patients with no zipcodes
+zipcodes_cohort2<-zipcodes_cohort[zipcodes_cohort$PAT_ZIP3 != "", ]
+length(unique(zipcodes_cohort2$PATIENT_ID))
+#90->203444
+#14->410805
+
+# Double check zip code occurred in the Rx file
+# listcode = RX %>% dplyr::count(PAT_ZIP3)
+
+# Count number of digits in zip code
+zipcodes_cohort2$nchar = nchar(zipcodes_cohort2$PAT_ZIP3)
+table(zipcodes_cohort2$nchar)
+
+# Count number of digits in zip code
+zipcodes_cohort2$PAT_ZIP3.rev = zipcodes_cohort2$PAT_ZIP3
+zipcodes_cohort2[PAT_ZIP3=="N.Y",]$PAT_ZIP3.rev=''
+
+# Add leading 0s
+zipcodes_cohort2[nchar %in% c(1,2),]$PAT_ZIP3.rev = str_pad(zipcodes_cohort2[nchar %in% c(1,2),]$PAT_ZIP3, 3, pad = "0")
+zipcodes_cohort2$nchar.rev = nchar(zipcodes_cohort2$PAT_ZIP3.rev)
+table(zipcodes_cohort2$nchar, zipcodes_cohort2$nchar.rev) 
+
+#remove duplicates
+zipcodes_cohort3<-zipcodes_cohort2[!duplicated(zipcodes_cohort2)]
+length(unique(zipcodes_cohort3$PATIENT_ID))
+#90->203444
+#14-> 410805
+
+fwrite(zipcodes_cohort3, "zipcode_patient_Dec13.csv")
+
+```
+
+#Match zipcode to state
+```{r}
+merge_patient_zipcode<-merge(zipstateall,zipcodes_cohort3,by="PAT_ZIP3.rev")
+length(unique(merge_patient_zipcode$PATIENT_ID))
+#90->203442
+#14-> 410803
+
+#get patient, state and zipcode
+patient_state<- merge_patient_zipcode %>%
+  dplyr::select("PATIENT_ID", "state", "PAT_ZIP3.rev","SVC_DT_date" )
+length(unique(patient_state$PATIENT_ID))
+#90->203442
+#14->410803
+
+```
+
+
+#match state info with statu_quo dataframe
+```{r}
+
+#rename services date
+names(patient_state)[names(patient_state) == 'SVC_DT_date'] <- "episode.start"
+
+patient_state$PAT_ZIP3.rev <- as.integer(patient_state$PAT_ZIP3.rev)
+patient_state$episode.start <- as.Date(patient_state$episode.start)
+length(unique(patient_state$PATIENT_ID))
+#90->203442
+#14-> 410803
+
+patient_state2<- patient_state %>%
+  dplyr::select("PATIENT_ID", "state" )
+length(unique(patient_state$PATIENT_ID))
+
+#keep one state by patient
+patient_state2<-patient_state2[!duplicated(patient_state2$PATIENT_ID)]
+length(unique(patient_state2$PATIENT_ID))
+#90->203442  
+#14->  410803
+nrow(patient_state2)
+#90->203442
+#14->  410803
+
+join_pat_state = merge(patient_state2, status_quo, by=c("PATIENT_ID"))
+length(unique(join_pat_state$PATIENT_ID))
+#90->203442
+#14->410803
+nrow(join_pat_state)
+#90->245187
+#14->549983
+
+fwrite(join_pat_state, "join_pat_state_Dec13.csv")
+```
+
+##### match payer and channel #####
+
+```{r}
+
+patient_data<-fread("RX_opioids_zip.chnl.pay_2014_2021.csv")
+demographics<- patient_data %>%
+  dplyr::select("PATIENT_ID", "CHNL_CD", "PAY_TYP_DESC", "SVC_DT" )
+
+status_quo<-fread("join_pat_state_Dec13.csv")
+length(unique(status_quo$PATIENT_ID))
+#90->203442
+#14->410803
+list_patient=unique(status_quo$PATIENT_ID)
+
+payment_cohort<-demographics[PATIENT_ID %in% list_patient]
+length(unique(payment_cohort$PATIENT_ID))
+#90->203442
+#14-> 410803
+
+#remove duplicates 
+payment_cohort<-payment_cohort[!duplicated(payment_cohort), ]
+
+payment_cohort$SVC_DT_date = format(ymd(payment_cohort$SVC_DT), "%Y-%m-%d")
+length(unique(payment_cohort$PATIENT_ID))
+#90->203442
+#14->410803
+
+names(payment_cohort)[names(payment_cohort) == 'SVC_DT_date'] <- "service.date"
+payment_cohort$service.date <- as.Date(payment_cohort$service.date)
+#length(unique(payment_cohort$PATIENT_ID))
+
+
+#select patient start and end date from status quo
+
+pat_date<- status_quo %>%
+  dplyr::select("PATIENT_ID", "episode.start", "episode.end" )
+
+case <-payment_cohort %>% right_join(pat_date)
+case$episode.end <- as.Date(case$episode.end)
+
+
+case2<-case %>% 
+  group_by(PATIENT_ID) %>% 
+   mutate(keep.delete = 
+        ifelse(case$service.date < case$episode.end, 'keep', 'delete'))
+
+case3<-case2[case2$keep.delete=="keep", ]
+
+case3$difference_in_days <- difftime(case3$episode.end, case3$service.date, units = "days")
+
+case4<- case3 %>% 
+    group_by(PATIENT_ID) %>% 
+    slice(which.min(difference_in_days))
+
+payment_cohort2<-case4 %>%
+  dplyr::select("PATIENT_ID", "PAY_TYP_DESC")
+
+join_pat_paych = merge(payment_cohort2, status_quo, by=c("PATIENT_ID"))
+length(unique(join_pat_paych$PATIENT_ID))
+#90->203442
+#14->410803
+nrow(join_pat_paych)
+#90->247666
+#14->554434
+
+join_pat_paych_2<-join_pat_paych[!duplicated(join_pat_paych), ]
+
+clean_final<-join_pat_paych_2 %>%
+  group_by(PATIENT_ID,episode.start,episode.ID) %>%
+  arrange(desc(episode.start)) %>%
+  filter(row_number()==1)
+
+#final number of patients
+length(unique(clean_final$PATIENT_ID))
+#90->203442
+#14->410803
+
+#final number of episodes
+nrow(clean_final)
+#90->245187
+#14->549983
+
+abrupt<-as.data.frame(clean_final[clean_final$classification == "abrupt discontinue", ])
+#90->192,285
+#14->400419
+length(unique(abrupt$PATIENT_ID))
+#90->161478
+#14->302338
+
+percentage_abrupt=nrow(abrupt)/nrow(clean_final)*100
+#90->78.42%
+#14->72.80%
+
+fwrite(clean_final, "L90H14days_classified_Dec13.csv")
+
+
+###############################################################
+####90L90H####
+#Initial number of patients: 203,981
+#Final number of patients: 203,442
+#Initial number of episodes:245,789
+#Final number of episodes:245,187 (0.244% of records removed) 
+
+#Initial number of patients abrupt:161,478
+#Final number of patients abrupt: 161,478 
+#Initial number of episodes abrupt:192,285
+#Final number of episodes abrupt: 192,285
+
+
+###############################################################
+####90L14H####
+#Initial number of patients: 412,023
+#Final number of patients: 410,803
+#Initial number of episodes:551,458
+#Final number of episodes:549,983 (0.267% of records removed)
+
+#Initial number of patients abrupt: 303,334
+#Final number of patients abrupt:  302,338
+#Initial number of episodes abrupt: 401,599
+#Final number of episodes abrupt: 400,419 (0.293% of records removed)
+
+
+```
+
+```{r}
+#clean_final$year<-format(as.Date(clean_final$episode.start, format="%Y-%m-%d"),"%Y")
+
+#test<-fread("L90H90days_classified_Dec13.csv")
+
+```
+
