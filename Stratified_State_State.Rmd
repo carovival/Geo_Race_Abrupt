@@ -1,0 +1,650 @@
+---
+title: "Stratified_State"
+output: html_document
+date: '2022-11-15'
+---
+
+--
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) 
+```
+
+
+```{r}
+library(pacman) 
+p_load("devtools", "dplyr", "scales", "ellipse", "ggplot2", "lazyeval", "igraph", "truncnorm", "ggraph", "reshape2", "knitr", "markdown", "stringr","readxl", "plyr","readr","data.table", "tidyr", "zoo", "lubridate", "ggpubr", "purrr", "forestplot", "grid", "tableone", "survival")
+setwd("C:/Users/cu888/Dropbox (Partners HealthCare)/Harvard/Projects/CEA_PrescriptionOpioid/PrescribingPolicies_Analysis/GeospatialAnalysis/Racial_Disparities")
+```
+
+#summary population
+```{r}
+df<-fread('Final sample_HD14DAYS_Dec14_1year.csv')
+# Excluded PR from the analytical sample
+df1 = df[state!="PR",c("PATIENT_ID","episode.start","episode.end","state","age","race","gender","last_MME","high_MME","previous_to_last2",
+              "first_MME","total_days_high","classification","PAY_TYP_DESC")]
+
+df1$month_end = substr(df1$episode.end,1,7)
+table(df1$month_end)
+
+#  age>18; white hispanic, and black race
+table(df1$race)
+df2 = df1[race %in% c("BLACK","WHITE", "HISPANIC"),]
+nrow(df2)
+# 355523
+
+table(df2$age)
+df2 = df2[!(age=="<18"),]
+nrow(df2)
+# 354940 final analytical sample
+
+# no. patients
+length(unique(df2$PATIENT_ID))
+
+#no. episodes
+nrow(df2)
+#426940
+
+#sex distribution
+(table(df2$gender))
+(round(table(df2$gender)/nrow(df2)*100, digits = 2))
+
+#age distirbution
+table(df2$age)
+round(table(df2$age)/nrow(df2)*100, digits=2)
+
+#race
+table(df2$race)
+round(table(df2$race)/nrow(df2)*100, digits=2)
+
+#payer
+table(df2$PAY_TYP_DESC)
+round(table(df2$PAY_TYP_DESC)/nrow(df2)*100, digits=2)
+
+#dmme level
+df2$DMME_level<-ifelse(df2$first_MME <50, "<50", 
+                      ifelse (df2$first_MME >=50 & df2$first_MME<90, "50-90",
+                              ifelse(df2$first_MME>=90 & df2$first_MME<120, "90-120",
+                                      ifelse(df2$first_MME>=120, "120+", NA))))
+#summary DMME level  
+table(df2$DMME_level)
+round (table(df2$DMME_level)/nrow(df2)*100, digits=2)
+
+##results combined
+df2$PAY_TYP_DESC[df2$PAY_TYP_DESC == "MEDICARE PART D"] <- "MEDICARE"
+
+# Create a variable list 
+listVars = c("gender", "age", "race", "PAY_TYP_DESC", "DMME_level")
+
+#Define categorical variables
+catVars = c("gender", "age", "race", "PAY_TYP_DESC", "DMME_level")
+
+#Total Population
+table1 = CreateTableOne(vars = listVars, data = df2, factorVars = catVars)
+table1
+
+table1_out = print(table1, exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+write.csv(table1_out, file = "LTHD_demographics.csv")
+
+
+####abrupt####
+abrupt<-as.data.frame(df2[df2$classification == "abrupt discontinue", ])
+
+# no. patients
+length(unique(abrupt$PATIENT_ID))
+
+#no. episodes
+nrow(abrupt)
+#301492
+nrow(abrupt)/nrow(df2)*100
+
+#sex distribution
+table(abrupt$gender)
+round(table(abrupt$gender)/nrow(abrupt)*100, digits=1)
+
+#age distirbution
+table(abrupt$age)
+round(table(abrupt$age)/nrow(abrupt)*100, digits=2)
+
+
+#race
+table(abrupt$race)
+round(table(abrupt$race)/nrow(abrupt)*100, digits=2)
+
+#payer
+table(abrupt$PAY_TYP_DESC)
+round(table(abrupt$PAY_TYP_DESC)/nrow(abrupt)*100, digits=2)
+
+                                     
+#summary DMME level  
+table(abrupt$DMME_level)
+round (table(abrupt$DMME_level)/nrow(abrupt)*100, digits=2)
+
+
+##results combined
+# Create a variable list 
+listVars = c("gender", "age", "race", "PAY_TYP_DESC", "DMME_level")
+
+#Define categorical variables
+catVars = c("gender", "age", "race", "PAY_TYP_DESC", "DMME_level")
+
+#Total Population
+table2 = CreateTableOne(vars = listVars, data = abrupt, factorVars = catVars)
+table2
+
+table2_out = print(table2, exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+write.csv(table2_out, file = "Abrupt_demographics.csv")
+
+####gradual####
+gradual<-as.data.frame(df2[df2$classification == "gradual discontinue", ])
+
+# no. patients
+length(unique(gradual$PATIENT_ID))
+length(unique(gradual$PATIENT_ID))/nrow(df2)*100
+
+#no. episodes
+nrow(gradual)
+#301492
+nrow(gradual)/nrow(df2)*100
+
+#sex distribution
+table(gradual$gender)
+round(table(gradual$gender)/nrow(gradual)*100, digits=1)
+
+#age distirbution
+table(gradual$age)
+round(table(gradual$age)/nrow(gradual)*100, digits=2)
+
+
+#race
+table(gradual$race)
+round(table(gradual$race)/nrow(gradual)*100, digits=2)
+
+#payer
+table(gradual$PAY_TYP_DESC)
+round(table(gradual$PAY_TYP_DESC)/nrow(gradual)*100, digits=2)
+
+#summary DMME level  
+table(gradual$DMME_level)
+round (table(gradual$DMME_level)/nrow(gradual)*100, digits=2)
+
+##results combined
+# Create a variable list 
+listVars = c("gender", "age", "race", "PAY_TYP_DESC", "DMME_level")
+
+#Define categorical variables
+catVars = c("gender", "age", "race", "PAY_TYP_DESC", "DMME_level")
+
+#Total Population
+table3 = CreateTableOne(vars = listVars, data = gradual, factorVars = catVars)
+table3
+
+table3_out = print(table3, exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+write.csv(table3_out, file = "Gradual_demographics.csv")
+
+
+```
+
+
+#Data Preparation
+```{r}
+dat<-fread('Final sample_HD14DAYS_Dec14_1year.csv')
+
+# Excluded PR from the analytical sample
+dat1 = dat[state!="PR",c("PATIENT_ID","episode.start","episode.end","state","age","race","gender","last_MME","high_MME","previous_to_last2",
+              "first_MME","total_days_high","classification","PAY_TYP_DESC")]
+
+dat1$month_end = substr(dat1$episode.end,1,7)
+table(dat1$month_end)
+
+#  age>18; white hispanic, and black race
+table(dat1$race)
+dat2 = dat1[race %in% c("BLACK","WHITE", "HISPANIC"),]
+nrow(dat2)
+# 355523
+
+table(dat2$age)
+dat2 = dat2[!(age=="<18"),]
+nrow(dat2)
+# 354940 final analytical sample
+
+dat2$year_start = as.numeric(substr(dat2$episode.start,1,4))-2014
+#table(dat3$year.start)
+dat2$year_end = as.numeric(substr(dat2$episode.end,1,4))-2014
+#table(dat3$year.end)
+
+# Re-categorizing variables
+dat2[ , abrupt := fifelse(classification=="abrupt discontinue",1,0)]
+#table(dat2$race_rev, dat2$abrupt, dat2$classification)
+
+
+#HI black-->NA
+#VT hispanic --> NA
+#WY black --> NA
+#DC hispanic --> DC
+
+dat2$race[dat2$state == "HI" & dat2$race == "BLACK"] <- "X"
+#table(dat2$state, dat2$race)
+nrow(dat2)
+
+dat2$race[dat2$state == "VT" & dat2$race == "HISPANIC"] <- "X"
+#table(dat2$state, dat2$race)
+
+dat2$race[dat2$state == "WY" & dat2$race == "BLACK"] <- "X"
+#table(dat2$state, dat2$race)
+
+dat2$race[dat2$state == "DC" & dat2$race == "HISPANIC"] <-"X"
+#table(dat2$state, dat2$race)
+nrow(dat2)
+#354940
+
+table(dat2$state)
+
+
+dat2[,race_rev := fifelse(race=="BLACK",1,
+                          ifelse(race=="HISPANIC",2,
+                                 ifelse(race=="X",NA,0)))]
+#table(dat2$state, dat2$race, dat2$race_rev)
+
+HI<-dat2[dat2$state == 'HI']
+#cohort size (HI)
+#B=5, H=20, W=208
+#abrupt (HI)
+#B=5, H=25, W=156
+
+
+dat2$PAY_TYP_DESC[dat2$state == "NM" & dat2$PAY_TYP_DESC == "MEDICAID"] <-"X"
+
+dat2[,payment := fifelse(PAY_TYP_DESC=="MEDICAID", 1,
+                         ifelse(PAY_TYP_DESC=="THIRD PARTY",3,
+                                ifelse(PAY_TYP_DESC=="CASH",4,
+                                       ifelse(PAY_TYP_DESC=="X",NA,2))))]
+table(dat2$PAY_TYP_DESC,dat2$payment)
+
+dat2[,firstMME := fifelse(first_MME<50, 0,
+                         ifelse(first_MME>=50 & first_MME<90,1,
+                                ifelse(first_MME>=90 & first_MME<120,2,
+                                       ifelse(first_MME>=120 ,3,4))))]
+# table(dat3$firstMME)
+
+
+
+dat2$abrupt = as.factor(dat2$abrupt)
+dat2$race_rev = as.factor(dat2$race_rev)
+dat2$payment = as.factor(dat2$payment)
+dat2$firstMME = as.factor(dat2$firstMME)
+
+
+#fwrite(dat2, "Final sample_HD14DAYS_Nov17_1year.csv")
+
+
+(table(dat2$state, dat2$race))
+table(dat2$state)
+nrow(dat2)
+#################
+
+
+
+#select data for ND and SC
+
+vec<-c("ND")
+sub_ND <- dat2[dat2$state %in% vec,]
+nrow(sub_ND)
+
+vec<-c("SC")
+sub_SC <- dat2[dat2$state %in% vec,]
+nrow(sub_SC)
+
+
+#remove ND and SC from dat2 
+dat3<-dat2[!(dat2$state=="ND" | dat2$state=="SC"),]
+nrow(dat3)
+#346942
+
+fwrite(dat3, "49_states.csv")
+fwrite(sub_ND, "ND.csv")
+fwrite(sub_SC, "SC.csv")
+
+```
+
+#Table for p-value by state and covariate
+```{r}
+
+dat<-fread('49_states.csv')
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+glmfunction_coef = function(x)
+{
+    result=glm(abrupt ~ race_rev+age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    COEFF=summary(result)$coefficients
+    out=as.data.frame(COEFF)
+    return(out)
+}
+
+
+out_coeff=by(dat,dat$state,glmfunction_coef)
+out_coeff2 <-  as.data.frame(do.call(rbind, out_coeff))
+
+#p-adjusted
+out_coeff2$BH = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "BH")
+
+#convert row label into column
+out_coeff2<- setDT(out_coeff2, keep.rownames = TRUE)[]
+
+#split state and covariates
+state_covariate<-data.frame(do.call('rbind', strsplit(as.character(out_coeff2$rn),'.',fixed=TRUE)))
+colnames(state_covariate)[colnames(state_covariate) == "X1"] ="State"
+colnames(state_covariate)[colnames(state_covariate) == "X2"] ="Covariate"
+
+#merge dataframes and keep final values
+final_coeff<- cbind(state_covariate, out_coeff2)  
+final_coeff<-subset(final_coeff, select = c(State, Covariate, `Pr(>|z|)`, BH ) )
+fwrite(final_coeff,"final_coeff.csv")
+
+```
+
+
+# #Table for OR and CI by state and covariate
+```{r}
+
+dat<-fread('49_states.csv')
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+#OR
+glmfunction_OR = function(x)
+{
+    result=glm(abrupt ~ race_rev+age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    OR=exp(cbind("Odds ratio" = coef(result), confint.default(result, level = 0.95)))
+    out=as.data.frame(OR)
+    return(out)
+}
+
+out_OR=by(dat,dat$state,glmfunction_OR)
+out_OR2 <-  as.data.frame(do.call(rbind, out_OR))
+
+#convert row label into column
+out_OR2<- setDT(out_OR2, keep.rownames = TRUE)[]
+colnames(out_OR2)[colnames(out_OR2) == "Odds ratio"] ="OR"
+
+
+#Adjusted CI
+glmfunction_OR2 = function(x)
+{
+    result=glm(abrupt ~ race_rev+age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    conf_b<-confint_adjust(result,method="bonferroni")
+    out=as.data.frame(conf_b)
+    return(out)
+}
+
+out_confb=by(dat,dat$state,glmfunction_OR2)
+out_confb2<-  as.data.frame(do.call(rbind, out_confb))
+
+#convert row label into column
+out_confb2<- setDT(out_confb2, keep.rownames = TRUE)[]
+
+#split state and covariate
+state_covariate2<-data.frame(do.call('rbind', strsplit(as.character(out_confb2$rn),'.',fixed=TRUE)))
+
+#state_covariate2<- subset(state_covariate2, select = -c(X3) )
+colnames(state_covariate2)[colnames(state_covariate2) == "X1"] ="State"
+colnames(state_covariate2)[colnames(state_covariate2) == "X2"] ="Covariate"
+
+colnames(out_confb2)[colnames(out_confb2) == "lwr"] ="adjusted_left"
+colnames(out_confb2)[colnames(out_confb2) == "upr"] ="adjusted_right"
+
+#merge dataframes and keep final values
+final_coeff_OR<- cbind(final_coeff, out_OR2,out_confb2)  
+final_coeff_OR_49<-subset(final_coeff_OR, select = c(State, Covariate, `Pr(>|z|)`,BH,OR, `2.5 %`, `97.5 %`,adjusted_left,adjusted_right))
+
+
+
+
+#fwrite(final_coeff_OR, "Final sample_PLOTS_HD14DAYS_Nov18_1year_46states.csv")
+
+```
+
+
+###ND####
+#Table for p-value by state and covariate
+```{r}
+
+dat<-fread('ND.csv')
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+glmfunction_coef = function(x)
+{
+    result=glm(abrupt ~ gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    COEFF=summary(result)$coefficients
+    out=as.data.frame(COEFF)
+    return(out)
+}
+
+
+out_coeff=by(dat,dat$state,glmfunction_coef)
+out_coeff2 <-  as.data.frame(do.call(rbind, out_coeff))
+
+#p-adjusted
+out_coeff2$BH = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "BH")
+
+#convert row label into column
+out_coeff2<- setDT(out_coeff2, keep.rownames = TRUE)[]
+
+#split state and covariates
+state_covariate<-data.frame(do.call('rbind', strsplit(as.character(out_coeff2$rn),'.',fixed=TRUE)))
+colnames(state_covariate)[colnames(state_covariate) == "X1"] ="State"
+colnames(state_covariate)[colnames(state_covariate) == "X2"] ="Covariate"
+
+#merge dataframes and keep final values
+final_coeff<- cbind(state_covariate, out_coeff2)  
+final_coeff<-subset(final_coeff, select = c(State, Covariate, `Pr(>|z|)`, BH ) )
+
+```
+
+
+# #Table for OR and CI by state and covariate
+```{r}
+
+dat<-fread('ND.csv')
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+
+#OR
+glmfunction_OR = function(x)
+{
+    result=glm(abrupt ~ gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    OR=exp(cbind("Odds ratio" = coef(result), confint.default(result, level = 0.95)))
+    out=as.data.frame(OR)
+    return(out)
+}
+
+out_OR=by(dat,dat$state,glmfunction_OR)
+out_OR2 <-  as.data.frame(do.call(rbind, out_OR))
+
+#convert row label into column
+out_OR2<- setDT(out_OR2, keep.rownames = TRUE)[]
+colnames(out_OR2)[colnames(out_OR2) == "Odds ratio"] ="OR"
+
+
+#Adjusted CI
+glmfunction_OR2 = function(x)
+{
+    result=glm(abrupt ~ gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    conf_b<-confint_adjust(result,method="bonferroni")
+    out=as.data.frame(conf_b)
+    return(out)
+}
+
+out_confb=by(dat,dat$state,glmfunction_OR2)
+out_confb2<-  as.data.frame(do.call(rbind, out_confb))
+
+#convert row label into column
+out_confb2<- setDT(out_confb2, keep.rownames = TRUE)[]
+
+#split state and covariate
+state_covariate2<-data.frame(do.call('rbind', strsplit(as.character(out_confb2$rn),'.',fixed=TRUE)))
+
+#state_covariate2<- subset(state_covariate2, select = -c(X3) )
+colnames(state_covariate2)[colnames(state_covariate2) == "X1"] ="State"
+colnames(state_covariate2)[colnames(state_covariate2) == "X2"] ="Covariate"
+
+colnames(out_confb2)[colnames(out_confb2) == "lwr"] ="adjusted_left"
+colnames(out_confb2)[colnames(out_confb2) == "upr"] ="adjusted_right"
+
+#merge dataframes and keep final values
+final_coeff_OR<- cbind(final_coeff, out_OR2,out_confb2)  
+final_coeff_OR_ND<-subset(final_coeff_OR, select = c(State, Covariate, `Pr(>|z|)`, BH, OR, `2.5 %`, `97.5 %`,adjusted_left,adjusted_right))
+
+
+```
+
+
+
+
+###SC####
+#Table for p-value by state and covariate
+```{r}
+
+dat<-fread('SC.csv')
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+glmfunction_coef = function(x)
+{
+    result=glm(abrupt ~ age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    COEFF=summary(result)$coefficients
+    out=as.data.frame(COEFF)
+    return(out)
+}
+
+
+out_coeff=by(dat,dat$state,glmfunction_coef)
+out_coeff2 <-  as.data.frame(do.call(rbind, out_coeff))
+
+#p-adjusted
+out_coeff2$BH = p.adjust(out_coeff2$`Pr(>|z|)`,
+               method = "BH")
+
+#convert row label into column
+out_coeff2<- setDT(out_coeff2, keep.rownames = TRUE)[]
+
+#split state and covariates
+state_covariate<-data.frame(do.call('rbind', strsplit(as.character(out_coeff2$rn),'.',fixed=TRUE)))
+colnames(state_covariate)[colnames(state_covariate) == "X1"] ="State"
+colnames(state_covariate)[colnames(state_covariate) == "X2"] ="Covariate"
+
+#merge dataframes and keep final values
+final_coeff<- cbind(state_covariate, out_coeff2)  
+final_coeff<-subset(final_coeff, select = c(State, Covariate, `Pr(>|z|)`, BH ) )
+
+```
+
+
+# #Table for OR and CI by state and covariate
+```{r}
+
+dat<-fread('SC.csv')
+
+dat$age = as.factor(dat$age)
+dat$gender = as.factor(dat$gender)
+dat$abrupt = as.factor(dat$abrupt)
+dat$race_rev = as.factor(dat$race_rev)
+dat$payment = as.factor(dat$payment)
+dat$firstMME = as.factor(dat$firstMME)
+
+
+#OR
+glmfunction_OR = function(x)
+{
+    result=glm(abrupt ~ age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    OR=exp(cbind("Odds ratio" = coef(result), confint.default(result, level = 0.95)))
+    out=as.data.frame(OR)
+    return(out)
+}
+
+out_OR=by(dat,dat$state,glmfunction_OR)
+out_OR2 <-  as.data.frame(do.call(rbind, out_OR))
+
+#convert row label into column
+out_OR2<- setDT(out_OR2, keep.rownames = TRUE)[]
+colnames(out_OR2)[colnames(out_OR2) == "Odds ratio"] ="OR"
+
+#Adjusted CI
+glmfunction_OR2 = function(x)
+{
+    result=glm(abrupt ~ age+gender+payment+year_end+firstMME, 
+                data = x, family = "binomial")
+    conf_b<-confint_adjust(result,method="bonferroni")
+    out=as.data.frame(conf_b)
+    return(out)
+}
+
+out_confb=by(dat,dat$state,glmfunction_OR2)
+out_confb2<-  as.data.frame(do.call(rbind, out_confb))
+
+#convert row label into column
+out_confb2<- setDT(out_confb2, keep.rownames = TRUE)[]
+
+#split state and covariate
+state_covariate2<-data.frame(do.call('rbind', strsplit(as.character(out_confb2$rn),'.',fixed=TRUE)))
+
+#state_covariate2<- subset(state_covariate2, select = -c(X3) )
+colnames(state_covariate2)[colnames(state_covariate2) == "X1"] ="State"
+colnames(state_covariate2)[colnames(state_covariate2) == "X2"] ="Covariate"
+
+colnames(out_confb2)[colnames(out_confb2) == "lwr"] ="adjusted_left"
+colnames(out_confb2)[colnames(out_confb2) == "upr"] ="adjusted_right"
+
+
+#merge dataframes and keep final values
+final_coeff_OR<- cbind(final_coeff, out_OR2,out_confb2)  
+final_coeff_OR_SC<-subset(final_coeff_OR, select = c(State, Covariate, `Pr(>|z|)`, ♦, OR, `2.5 %`, `97.5 %`, adjusted_left, adjusted_right))
+
+final<-rbind(final_coeff_OR_49,final_coeff_OR_ND,final_coeff_OR_SC)
+
+fwrite(final, "Final sample_PLOTS_HD14DAYS_March22_1year.csv")
+
+```
+
+
+
+
