@@ -1,0 +1,89 @@
+---
+title: "SampleRestriction"
+output: html_document
+date: '2022-07-01'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) 
+```
+
+
+```{r}
+library(readxl) 
+library(data.table)
+library(lubridate) 
+library(tidyverse)
+library(survival)
+library(parallel)
+library(dplyr)
+library(plyr)
+library(epitools)
+```
+
+```{r}
+
+
+LTHD<-fread("L90H14days_classified_Dec12.csv")
+listpatient = unique(LTHD$PATIENT_ID)
+
+
+
+data_all<-fread('ALL RX for sample.csv')
+#166833271
+
+#remove duplicates
+data_all<-data_all[!duplicated(data_all)]
+
+patient_service<-data_all %>%
+  select(PATIENT_ID, SVC_DT)
+
+patient_episode_end<-LTHD %>%
+  dplyr::select(PATIENT_ID, episode.end)
+
+#remove duplicates
+patient_episode_end<-patient_episode_end[!duplicated(patient_episode_end)]
+
+
+case <-merge(patient_episode_end, patient_service, by = c('PATIENT_ID'), allow.cartesian=TRUE)
+case$date.service = format(ymd(case$SVC_DT), "%Y-%m-%d")
+
+#case2<- case[episode.end<= date.service,]
+case$sixm<- difftime(case$date.service,case$episode.end, units="days")
+case2<- case[sixm<=365 & 0<sixm,]
+
+
+includedID = unique(case2$PATIENT_ID)
+length(includedID)
+
+
+length(includedID)/length(listpatient)*100
+# 87.17%
+#six months --> 66.02%
+
+LTHD14 = LTHD[PATIENT_ID %in% includedID, ]
+nrow(LTHD14)
+#356963
+#407504
+
+#remove duplicates
+LTHD14<-LTHD14[!duplicated(LTHD14)]
+#356963
+#407504
+
+#number of episodes
+episode_len<-aggregate(LTHD14$episode.ID, by=list(LTHD14$episode.ID,LTHD14$PATIENT_ID ), FUN=length)
+nrow(episode_len)
+#356963
+
+length(unique(LTHD14$PATIENT_ID))
+#263303
+
+fwrite(LTHD14, "HD14_restriction_for_Rx_1year.csv")
+
+
+
+
+```
+
