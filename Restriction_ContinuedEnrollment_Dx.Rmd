@@ -1,0 +1,246 @@
+---
+title: "SampleRestriction"
+output: html_document
+date: '2022-07-01'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) 
+```
+
+
+```{r}
+library(readxl) 
+library(data.table)
+library(lubridate) 
+library(tidyverse)
+library(survival)
+library(parallel)
+library(dplyr)
+library(plyr)
+library(epitools)
+```
+
+```{r}
+data1<-fread("L90H14days.csv")
+listpatient14 = unique(data1$PATIENT_ID)
+
+data2<-fread("L90H90days.csv")
+listpatient90 = unique(data2$PATIENT_ID)
+
+merge_list<-append(listpatient14,listpatient90)
+
+final_list<-unique(merge_list)
+
+filenum_dx = c(seq(201401, 201412, 1), seq(201501, 201512, 1),seq(201601, 201612, 1),
+               seq(201701, 201712, 1),seq(201801, 201812, 1), 
+               seq(201901, 201912, 1),seq(202001, 202012, 1), 
+               seq(202101, 202109, 1))
+datanames_dx = paste("FACT_DX_", filenum_dx, ".gz", sep="")
+datanames = paste("FACT_DX_", filenum_dx, sep="")
+
+for(i in 1:length(datanames_dx))
+{ 
+  assign(
+    datanames_dx[i],
+   fread(file = paste("\\\\rfawin.partners.org\\mgh-itafisma\\IQVIA\\Dx_data\\", datanames_dx[i], sep=""),
+          select = c("SVC_DT","PATIENT_ID", "DIAG_CD", "PAY_TYP_DESC")) [PATIENT_ID %in% final_list]
+  )
+
+} 
+
+
+# Combine all the DX data
+df_list = mget(ls(pattern = "FACT_DX_.*"))
+
+FACT_DX_2015_2021 = dplyr::bind_rows(df_list)
+fwrite(FACT_DX_2015_2021, "Dx_2014_2021.csv")
+```
+
+```{r}
+
+LTHD<-fread("L90H14days_classified_Dec12.csv")
+listpatient = unique(LTHD$PATIENT_ID)
+#410803
+
+data_all<-fread('Dx_2014_2021.csv')
+#166833271
+
+#remove duplicates
+data_all<-data_all[!duplicated(data_all)]
+#64769577
+
+patient_service<-data_all %>%
+  select(PATIENT_ID, SVC_DT)
+
+patient_episode_end<-LTHD %>%
+  dplyr::select(PATIENT_ID, episode.end)
+
+#remove duplicates
+patient_episode_end<-patient_episode_end[!duplicated(patient_episode_end)]
+
+
+case <-merge(patient_episode_end, patient_service, by = c('PATIENT_ID'), allow.cartesian=TRUE)
+case$date.service = format(ymd(case$SVC_DT), "%Y-%m-%d")
+
+#at least one diagnosis after episode end 
+#case2<- case[episode.end <= date.service,]
+case$sixm<- difftime(case$date.service,case$episode.end, units="days")
+case2<- case[sixm<=365 & 0<sixm,]
+
+
+includedID = unique(case2$PATIENT_ID)
+length(includedID)
+#243470
+#six months: 229489
+#1yr: 247153
+
+length(includedID)/length(listpatient)*100
+# 55.86%
+#60.16%
+
+L90H14 = LTHD[PATIENT_ID %in% includedID, ]
+nrow(L90H14)
+#330732
+#348791
+#371644
+
+#remove duplicates
+L90H14<-L90H14[!duplicated(L90H14)]
+nrow(L90H14)
+#330732
+#348791
+#371644
+
+#number of episodes
+episode_len<-aggregate(L90H14$episode.ID, by=list(L90H14$episode.ID,L90H14$PATIENT_ID ), FUN=length)
+nrow(episode_len)
+#330732
+nrow(L90H14)/nrow(LTHD)
+#83.58% for records kept
+#63.41% records kept 
+#67.57% kept
+
+length(unique(L90H14$PATIENT_ID))
+#243470
+
+fwrite(L90H14, "HD14_restriction_for_Dx_1year.csv")
+
+```
+
+
+
+
+```{r}
+#join Dx restriction with Rx restriction
+dx<-fread("HD14_restriction_for_Dx_1year.csv")
+rx<-fread("HD14_restriction_for_Rx_1year.csv")
+
+#combine dataframes
+
+combine<-rbind(dx, rx)
+
+#remove duplicates
+final<-combine %>% distinct()
+nrow(final)
+
+#nrow(final)/nrow(LTHD)
+#92.70
+
+length(unique(final$PATIENT_ID))
+
+
+fwrite(final,"Final sample_HD14DAYS_Dec14_1year.csv")
+
+#number of episodes:366837
+#number of patients: 273177
+
+#number of episodes:428503
+#number of patients: 290417
+
+
+```
+
+```{r}
+# LTHD$year<-format(as.Date(LTHD$episode.end, format="%Y-%m-%d"),"%Y")
+# table(LTHD$year)
+# final$year<-format(as.Date(final$episode.end, format="%Y-%m-%d"),"%Y")
+# table(final$year)
+# 
+# episode_patient<-aggregate(LTHD$PATIENT_ID, by=list(LTHD$PATIENT_ID), FUN=length)
+# 
+# 
+# #428503
+# final2<-final[episode.end<='2021-3-31',]
+# #375846
+# 
+# fwrite(final2,"Final sample_HD14DAYS_Nov11_1year.csv")
+# 
+# 
+# LTHD2<-LTHD[episode.end<='2021-3-31',]
+# 
+# nrow(final2)/nrow(LTHD2)
+# #91.63%
+# 
+# LTHD2$year<-format(as.Date(LTHD2$episode.end, format="%Y-%m-%d"),"%Y")
+# table(LTHD2$year)
+# final2$year<-format(as.Date(final2$episode.end, format="%Y-%m-%d"),"%Y")
+# a<-table(final2$year)
+# 
+# vec <- c(46696, 68349, 74080, 65743, 59242, 49713, 41671, 10491)
+# 
+#  t(t(a) / vec)
+
+```
+
+
+
+```{r}
+#####Six months#####
+LTHD<-fread("L90H14days_classified_Nov2.csv")
+#549983
+LTHD2<-LTHD[episode.end<='2021-3-31',]
+#415985
+
+six_m<-fread("Final sample_HD14DAYS_Nov11_sixm.csv")
+#375846
+six_m2<-six_m[episode.end<='2021-3-31',]
+#375846
+
+#number of episodes: 375846
+#percentage of episodes kept: 90.35%
+
+LTHD2$year<-format(as.Date(LTHD2$episode.end, format="%Y-%m-%d"),"%Y")
+table(LTHD2$year)
+six_m2$year<-format(as.Date(six_m2$episode.end, format="%Y-%m-%d"),"%Y")
+table(six_m2$year)
+
+
+fwrite(six_m2,"Final sample_HD14DAYS_Nov11_sixm.csv")
+```
+
+
+
+```{r}
+#####1 year#####
+LTHD<-fread("L90H14days_classified_Dec12.csv")
+#549983
+LTHD2<-LTHD[episode.end<='2020-8-31',]
+#392904
+
+oney<-fread("Final sample_HD14DAYS_Dec14_1year.csv")
+#434283
+oney2<-oney[episode.end<='2020-8-31',]
+#361063
+
+#number of episodes: 361063
+#percentage of episodes kept: 91.89%
+
+oney2$year<-format(as.Date(oney2$episode.end, format="%Y-%m-%d"),"%Y")
+table(oney2$year)
+
+fwrite(oney2,"Final sample_HD14DAYS_Dec14_1year.csv")
+
+```
+
