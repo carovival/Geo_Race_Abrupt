@@ -1,0 +1,1126 @@
+---
+title: "Geo_Plots"
+output: html_document
+date: '2022-10-26'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) 
+```
+
+
+```{r}
+library(pacman) 
+p_load("here", "devtools", "dplyr", "scales", "ellipse", "ggplot2", "lazyeval", "igraph", "truncnorm", "ggraph", "reshape2", "knitr", "markdown", "stringr","readxl", "plyr","readr","data.table", "tidyr", "zoo", "lubridate", "ggpubr", "purrr", "forestplot", "grid", "forestploter")
+#setwd("C:/Users/cu888/Dropbox (Partners HealthCare)/Harvard/Projects/CEA_PrescriptionOpioid/PrescribingPolicies_Analysis/GeospatialAnalysis/Racial_Disparities")
+```
+
+```{r name-of-chunk, fig.width=10, fig.height=15}
+df_data<-fread("Final sample_PLOTS_HD14DAYS_March22_1year.csv")
+
+#rename covariates 
+df_data[df_data== 'race_rev1'] <- 'race_Black'
+df_data[df_data== 'race_rev2'] <- 'race_Hispanic'
+df_data[df_data== 'genderM'] <- 'sex_Male'
+df_data[df_data== 'age35-49'] <- 'age_35to49'
+df_data[df_data== 'age50-64'] <- 'age_50to64'
+df_data[df_data== 'age65+'] <- 'age_65'
+
+df_data[df_data== 'payment2'] <- 'payment_medicare'
+df_data[df_data== 'payment3'] <- 'payment_third'
+df_data[df_data== 'payment4'] <- 'payment_cash'
+df_data[df_data== 'firstMME1'] <- 'MME_between_50_90'
+df_data[df_data== 'firstMME2'] <- 'MME_between_90_120'
+df_data[df_data== 'firstMME3'] <- 'MME_more_120'
+
+#remove  unadjusted CI
+
+df_data<-subset(df_data, select = c(State, Covariate, OR, BH, `2.5 %`, `97.5 %`))
+
+#names(df_data)[names(df_data)=="adjusted_left"]<-"2.5 %"
+#names(df_data)[names(df_data)=="adjusted_right"]<-"97.5 %"
+names(df_data)[names(df_data)=="BH"]<-"Pr(>|z|)"
+
+
+
+```
+
+#plots for race
+```{r name-of-chunk, fig.width=3, fig.height=14.5}
+###### plots for race ######
+
+
+####select for black patients####
+
+black_data<-df_data[df_data$Covariate == 'race_Black']
+black<-black_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+
+#add line for missing states
+add_s1<-data.frame(State="HI")
+add_s2<-data.frame(State="WY")
+add_s3<-data.frame(State="ND")
+add_s4<-data.frame(State="SC")
+black<-bind_rows(black,add_s1,add_s2,add_s3,add_s4)
+
+
+
+black$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+black$`AOR` <-  ifelse(is.na(black$OR),"",
+                                      sprintf("%.2f",
+                                     black$OR))
+
+
+
+#order data descending
+black <- black[order(State),]
+
+tm <- forest_theme(core=list(fg_params=list(hjust = 1, x = 0.9),
+                             bg_params=list(fill = c("#edf8e9", "#c7e9c0", "#a1d99b"))),
+                   colhead=list(fg_params=list(hjust=0.5, x=0.5)))
+
+tm <- forest_theme(base_size = 20,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(black$`2.5 %`, na.rm=TRUE)
+max<-max(black$`97.5 %`,na.rm=TRUE)
+
+         
+black_plot<- forest(black[,c(5:6)],
+            est = black$OR,
+            lower = black$`2.5 %`, 
+            upper = black$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.02, 4.2),
+            xlog=TRUE,
+            ticks_at = c(0.5, 1, 2,3,4),
+            #arrow_lab = c("White Patients have Higher Risk", "Black Patients have Higher Risk"),
+           theme=tm)
+
+# black_plot<- add_underline(black_plot, part = "header")
+# # Insert text at top
+# black_plot <- insert_text(black_plot,
+#                  text = "Race/ethnicity (Black Patients)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+
+black_plot <- edit_plot(black_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-black_data[black_data$`Pr(>|z|)` <=0.05,]
+
+###count and % for sig states 
+sig_black<-sig
+black_allstates<-nrow(black_data)
+black_sig<-nrow(sig)
+blac_sig_per<-round(black_sig/nrow(black_data)*100, digits=1)
+###########
+
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+black$index <- 1:nrow(black)
+position_OR_below = black[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+black_plot <- edit_plot(black_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+black$index <- 1:nrow(black)
+position_OR_over = black[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+black_plot <- edit_plot(black_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+
+# Print plot
+plot(black_plot)
+
+png('race_black.svg', res = 300, width = 8, height = 18, units = "in")
+black_plot
+dev.off()
+
+
+
+####select for hispanic patients####
+
+hispanic_data<-df_data[df_data$Covariate == 'race_Hispanic']
+hispanic<-hispanic_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+
+#add line for missing states
+add_s1<-data.frame(State="HI")
+add_s2<-data.frame(State="WY")
+add_s3<-data.frame(State="ND")
+add_s4<-data.frame(State="SC")
+hispanic<-bind_rows(hispanic,add_s1,add_s2,add_s3,add_s4)
+
+
+
+hispanic$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+hispanic$`AOR` <-  ifelse(is.na(hispanic$OR),"",
+                                      sprintf("%.2f",
+                                     hispanic$OR))
+
+
+
+#order data descending
+hispanic <- hispanic[order(State),]
+
+tm <- forest_theme(core=list(fg_params=list(hjust = 1, x = 0.9),
+                             bg_params=list(fill = c("#edf8e9", "#c7e9c0", "#a1d99b"))),
+                   colhead=list(fg_params=list(hjust=0.5, x=0.5)))
+
+tm <- forest_theme(base_size = 20,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(hispanic$`2.5 %`, na.rm=TRUE)
+max<-max(hispanic$`97.5 %`,na.rm=TRUE)
+
+         
+hispanic_plot<- forest(hispanic[,c(5:6)],
+            est = hispanic$OR,
+            lower = hispanic$`2.5 %`, 
+            upper = hispanic$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.02, 4.2),
+            xlog=TRUE,
+            ticks_at = c(0.5, 1, 2,3,4),
+            #arrow_lab = c("White Patients have Higher Risk", "hispanic Patients have Higher Risk"),
+           theme=tm)
+
+# hispanic_plot<- add_underline(hispanic_plot, part = "header")
+# # Insert text at top
+# hispanic_plot <- insert_text(hispanic_plot,
+#                  text = "Race/ethnicity (hispanic Patients)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+
+hispanic_plot <- edit_plot(hispanic_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-hispanic_data[hispanic_data$`Pr(>|z|)` <=0.05,]
+
+###count and % for sig states 
+sig_hispanic<-sig
+hispanic_allstates<-nrow(hispanic_data)
+hispanic_sig<-nrow(sig)
+blac_sig_per<-round(hispanic_sig/nrow(hispanic_data)*100, digits=1)
+###########
+
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+hispanic$index <- 1:nrow(hispanic)
+position_OR_below = hispanic[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+hispanic_plot <- edit_plot(hispanic_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+hispanic$index <- 1:nrow(hispanic)
+position_OR_over = hispanic[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+hispanic_plot <- edit_plot(hispanic_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+
+# Print plot
+plot(hispanic_plot)
+
+png('race_hispanic.svg', res = 300, width = 8, height = 18, units = "in")
+hispanic_plot
+dev.off()
+
+```
+
+
+#plots payments
+
+```{r name-of-chunk, fig.width=3, fig.height=14.5}
+
+####select for payment_medicare patients####
+
+payment_medicare_data<-df_data[df_data$Covariate == 'payment_medicare']
+payment_medicare<-payment_medicare_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+#add line for missing states
+add_s1<-data.frame(State="HI")
+add_s2<-data.frame(State="NM")
+payment_medicare<-bind_rows(payment_medicare,add_s1,add_s2)
+
+payment_medicare$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+payment_medicare$`AOR` <-  ifelse(is.na(payment_medicare$OR),"",
+                                           sprintf("%.2f",
+                                     payment_medicare$OR))
+
+#order data descending
+payment_medicare <- payment_medicare[order(State),]
+
+tm <- forest_theme(base_size = 15,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(payment_medicare$`2.5 %`,na.rm=TRUE)
+max<-max(payment_medicare$`97.5 %`, na.rm=TRUE)
+
+payment_medicare_plot<- forest(payment_medicare[,c(5:6)],
+            est = payment_medicare$OR,
+            lower = payment_medicare$`2.5 %`, 
+            upper = payment_medicare$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.02,4.2),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1, 2,3,4),
+            #arrow_lab = c("White Patients have Higher Risk", "payment_medicare Patients have Higher Risk"),
+           theme=tm)
+
+# payment_medicare_plot<- add_underline(payment_medicare_plot, part = "header")
+# # Insert text at top
+# payment_medicare_plot <- insert_text(payment_medicare_plot,
+#                  text = "Payment (Medicare)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+payment_medicare_plot <- edit_plot(payment_medicare_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-payment_medicare_data[payment_medicare_data$`Pr(>|z|)` <=0.05,]
+sig_payment_medicare_data<-sig
+
+state_sig = unique(sig$State)
+payment_medicare$index <- 1:nrow(payment_medicare)
+position_sig = payment_medicare[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+payment_medicare$index <- 1:nrow(payment_medicare)
+position_OR_below = payment_medicare[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+payment_medicare_plot <- edit_plot(payment_medicare_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+payment_medicare$index <- 1:nrow(payment_medicare)
+position_OR_over = payment_medicare[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+payment_medicare_plot <- edit_plot(payment_medicare_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+# Print plot
+
+
+# Print plot
+p<-plot(payment_medicare_plot)
+ggsave(filename='payment_medicare.svg', plot=p)
+
+# plot(payment_medicare_plot)
+# png('payment_medicare.svg', res = 300, width = 8, height = 18, units = "in")
+# payment_medicare_plot
+# dev.off()
+
+
+
+
+####select for payment_third patients####
+
+payment_third_data<-df_data[df_data$Covariate == 'payment_third']
+payment_third<-payment_third_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+payment_third$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+
+payment_third$`AOR` <-  ifelse(is.na(payment_third$OR),"",
+                                           sprintf("%.2f",
+                                    payment_third$OR))
+
+
+#order data descending
+payment_third <- payment_third[order(State),]
+
+tm <- forest_theme(base_size = 20,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(payment_third$`2.5 %`)
+max<-max(payment_third$`97.5 %`)
+         
+payment_third_plot<- forest(payment_third[,c(5:6)],
+            est = payment_third$OR,
+            lower = payment_third$`2.5 %`, 
+            upper = payment_third$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(min,5),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1, 2),
+            #arrow_lab = c("White Patients have Higher Risk", "payment_third Patients have Higher Risk"),
+           theme=tm)
+
+# payment_third_plot<- add_underline(payment_third_plot, part = "header")
+# # Insert text at top
+# payment_third_plot <- insert_text(payment_third_plot,
+#                  text = "Payment (Private Insurance)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+payment_third_plot <- edit_plot(payment_third_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-payment_third_data[payment_third_data$`Pr(>|z|)` <=0.05,]
+sig_payment_third_data<-sig
+
+state_sig = unique(sig$State)
+payment_third$index <- 1:nrow(payment_third)
+position_sig = payment_third[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+payment_third$index <- 1:nrow(payment_third)
+position_OR_below = payment_third[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+payment_third_plot <- edit_plot(payment_third_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+payment_third$index <- 1:nrow(payment_third)
+position_OR_over = payment_third[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+payment_third_plot <- edit_plot(payment_third_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+# Print plot
+plot(payment_third_plot)
+
+png('payment_third.svg', res = 300, width = 8, height = 18, units = "in")
+payment_third_plot
+dev.off()
+
+
+
+
+####select for payment_cash patients####
+
+payment_cash_data<-df_data[df_data$Covariate == 'payment_cash']
+payment_cash<-payment_cash_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+payment_cash$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+payment_cash$`AOR` <-  ifelse(is.na(payment_cash$OR),"",
+                                           sprintf("%.2f",
+                                    payment_cash$OR))
+
+
+#order data descending
+payment_cash <- payment_cash[order(State),]
+
+tm <- forest_theme(base_size = 15,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(payment_cash$`2.5 %`)
+max<-max(payment_cash$`97.5 %`)
+         
+payment_cash_plot<- forest(payment_cash[,c(5:6)],
+            est = payment_cash$OR,
+            lower = payment_cash$`2.5 %`, 
+            upper = payment_cash$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.02,4.2),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1, 2,3,4),
+            #arrow_lab = c("White Patients have Higher Risk", "payment_cash Patients have Higher Risk"),
+           theme=tm)
+
+# payment_cash_plot<- add_underline(payment_cash_plot, part = "header")
+# # Insert text at top
+# payment_cash_plot <- insert_text(payment_cash_plot,
+#                  text = "Payment (Out-of-Pocket)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+payment_cash_plot <- edit_plot(payment_cash_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-payment_cash_data[payment_cash_data$`Pr(>|z|)` <=0.05,]
+sig_payment_cash_data<-sig
+
+payment_all<-rbind(payment_cash_data, payment_third_data, payment_medicare_data)
+unique_allstate_payment<-length(unique(payment_all$State))
+
+
+payment_sig<-rbind(sig_payment_cash_data, sig_payment_third_data, sig_payment_medicare_data)
+unique_states_payment<-length(unique(payment_sig$State))
+payment_sig_per<-round(unique_states_payment/unique_allstate_payment*100, digits=1)
+
+
+
+state_sig = unique(sig$State)
+payment_cash$index <- 1:nrow(payment_cash)
+position_sig = payment_cash[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+payment_cash$index <- 1:nrow(payment_cash)
+position_OR_below = payment_cash[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+payment_cash_plot <- edit_plot(payment_cash_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+payment_cash$index <- 1:nrow(payment_cash)
+position_OR_over = payment_cash[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+payment_cash_plot <- edit_plot(payment_cash_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+# Print plot
+
+p<-plot(payment_cash_plot)
+ggsave(filename='payment_cash.svg', plot=p)
+
+# plot(payment_cash_plot)
+# png('payment_cash.svg', res = 300, width = 8, height = 18, units = "in")
+# payment_cash_plot
+# dev.off()
+
+```
+
+
+#plots first MMEs
+```{r name-of-chunk, fig.width=3, fig.height=14.5}
+
+####select for MME_more_120 patients####
+
+MME_120_data<-df_data[df_data$Covariate == 'MME_more_120']
+MME_120<-MME_120_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+MME_120$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+MME_120$`AOR` <-  sprintf("%.2f",
+                                     MME_120$OR)
+
+#order data descending
+MME_120 <- MME_120[order(State),]
+
+tm <- forest_theme(base_size = 15,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(MME_120$`2.5 %`)
+max<-max(MME_120$`97.5 %`)
+         
+MME_120_plot<- forest(MME_120[,c(5:6)],
+            est = MME_120$OR,
+            lower = MME_120$`2.5 %`, 
+            upper = MME_120$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.02,4.2),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1,2,3,4),
+            #arrow_lab = c("White Patients have Higher Risk", "MME_120 Patients have Higher Risk"),
+           theme=tm)
+
+# #MME_120_plot<- add_underline(MME_120_plot, part = "header")
+# # Insert text at top
+# MME_120_plot <- insert_text(MME_120_plot,
+#                  text = "DMME (120+)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+MME_120_plot <- edit_plot(MME_120_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-MME_120_data[MME_120_data$`Pr(>|z|)` <=0.05,]
+
+state_sig = unique(sig$State)
+MME_120$index <- 1:nrow(MME_120)
+position_sig = MME_120[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector) 
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+MME_120$index <- 1:nrow(MME_120)
+position_OR_below = MME_120[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+MME_120_plot <- edit_plot(MME_120_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+MME_120$index <- 1:nrow(MME_120)
+position_OR_over = MME_120[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+MME_120_plot <- edit_plot(MME_120_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+# Print plot
+p<-plot(MME_120_plot)
+ggsave(filename='MME_120.svg', plot=p)
+
+# plot(MME_120_plot)
+# png('MME_120.svg', res = 300, width = 8, height = 18, units = "in")
+# MME_120_plot
+# dev.off()
+
+```
+
+#plot for sex
+```{r name-of-chunk, fig.width=10, fig.height=15}
+
+####select for male patients####
+
+male_data<-df_data[df_data$Covariate == 'sex_Male']
+male<-male_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+male$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+male$`AOR` <-  sprintf("%.2f",
+                                     male$OR)
+
+
+#order data descending
+male <- male[order(State),]
+
+tm <- forest_theme(base_size = 20,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(male$`2.5 %`)
+max<-max(male$`97.5 %`)
+         
+male_plot<- forest(male[,c(5:6)],
+            est = male$OR,
+            lower = male$`2.5 %`, 
+            upper = male$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(min,max),
+            xlog = TRUE,
+            #ticks_at = c(0.5, 1, 1.5),
+            #arrow_lab = c("White Patients have Higher Risk", "male Patients have Higher Risk"),
+           theme=tm)
+
+# male_plot<- add_underline(male_plot, part = "header")
+# # Insert text at top
+# male_plot <- insert_text(male_plot,
+#                  text = "Sex (Male Patients)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+male_plot <- edit_plot(male_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-male_data[male_data$`Pr(>|z|)` <=0.05,]
+
+###count and % for sig states 
+male_allstates<-nrow(male_data)
+male_sig<-nrow(sig)
+male_sig_per<-round(male_sig/nrow(male_data)*100, digits=1)
+
+
+state_sig = unique(sig$State)
+male$index <- 1:nrow(male)
+position_sig = male[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+male$index <- 1:nrow(male)
+position_OR_below = male[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+male_plot <- edit_plot(male_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+male$index <- 1:nrow(male)
+position_OR_over = male[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+male_plot <- edit_plot(male_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+# Print plot
+plot(male_plot)
+
+png('sex_male.svg', res = 300, width = 8, height = 18, units = "in")
+male_plot
+dev.off()
+
+```
+
+
+#plots for age groups 
+```{r name-of-chunk, fig.width=3, fig.height=14.5}
+
+####select for age_35to49 patients####
+
+age_35to49_data<-df_data[df_data$Covariate == 'age_35to49']
+age_35to49<-age_35to49_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+#add line for missing states
+add_s1<-data.frame(State="ND")
+age_35to49<-bind_rows(age_35to49,add_s1)
+
+
+age_35to49$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+age_35to49$`AOR` <-  ifelse(is.na(age_35to49$OR),"",
+                                     sprintf("%.2f",
+                                     age_35to49$OR))
+
+#large CI for ND --> 7.83 (1.11 to 55.25)
+
+#order data descending
+age_35to49 <- age_35to49[order(State),]
+
+tm <- forest_theme(base_size = 10)
+
+#find min and max
+min<-min(age_35to49$`2.5 %`, na.rm=TRUE)
+max<-max(age_35to49$`97.5 %`, na.rm=TRUE)
+         
+age_35to49_plot<- forest(age_35to49[,c(5:6)],
+            est = age_35to49$OR,
+            lower = age_35to49$`2.5 %`, 
+            upper = age_35to49$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(min,5),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1, 2),
+            #arrow_lab = c("White Patients have Higher Risk", "age_35to49 Patients have Higher Risk"),
+           theme=tm)
+
+# age_35to49_plot<- add_underline(age_35to49_plot, part = "header")
+# # Insert text at top
+# age_35to49_plot <- insert_text(age_35to49_plot,
+#                  text = "Age (35-49)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+age_35to49_plot <- edit_plot(age_35to49_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-age_35to49_data[age_35to49_data$`Pr(>|z|)` <=0.05,]
+sig_age_35to49_data<-sig
+
+state_sig = unique(sig$State)
+age_35to49$index <- 1:nrow(age_35to49)
+position_sig = age_35to49[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+age_35to49$index <- 1:nrow(age_35to49)
+position_OR_below = age_35to49[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+age_35to49_plot <- edit_plot(age_35to49_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+age_35to49$index <- 1:nrow(age_35to49)
+position_OR_over = age_35to49[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+age_35to49_plot <- edit_plot(age_35to49_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+# Print plot
+plot(age_35to49_plot)
+
+png('age_35to49.png', res = 300, width = 5, height = 13, units = "in")
+age_35to49_plot
+dev.off()
+
+
+
+
+####select for age_50to64 patients####
+
+age_50to64_data<-df_data[df_data$Covariate == 'age_50to64']
+age_50to64<-age_50to64_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+#add line for missing states
+add_s1<-data.frame(State="ND")
+age_50to64<-bind_rows(age_50to64,add_s1)
+
+
+age_50to64$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+age_50to64$`AOR` <-  ifelse(is.na(age_50to64$OR),"",
+                                     sprintf("%.2f",
+                                     age_50to64$OR))
+
+#large CI for ND --> 10.89 (1.58 to 74.90)
+
+#order data descending
+age_50to64 <- age_50to64[order(State),]
+
+tm <- forest_theme(base_size = 10)
+
+#find min and max
+min<-min(age_50to64$`2.5 %`, na.rm=TRUE)
+max<-max(age_50to64$`97.5 %`, na.rm=TRUE)
+         
+age_50to64_plot<- forest(age_50to64[c(5:6)],
+            est = age_50to64$OR,
+            lower = age_50to64$`2.5 %`, 
+            upper = age_50to64$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(min,5),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1, 2),
+            #arrow_lab = c("White Patients have Higher Risk", "age_50to64 Patients have Higher Risk"),
+           theme=tm)
+
+# age_50to64_plot<- add_underline(age_50to64_plot, part = "header")
+# # Insert text at top
+# age_50to64_plot <- insert_text(age_50to64_plot,
+#                  text = "Age (50-64)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+age_50to64_plot <- edit_plot(age_50to64_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-age_50to64_data[age_50to64_data$`Pr(>|z|)` <=0.05,]
+sig_age_50to64_data<-sig
+
+state_sig = unique(sig$State)
+age_50to64$index <- 1:nrow(age_50to64)
+position_sig = age_50to64[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+age_50to64$index <- 1:nrow(age_50to64)
+position_OR_below = age_50to64[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+age_50to64_plot <- edit_plot(age_50to64_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+age_50to64$index <- 1:nrow(age_50to64)
+position_OR_over = age_50to64[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+age_50to64_plot <- edit_plot(age_50to64_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+
+# Print plot
+plot(age_50to64_plot)
+
+png('age_50to64.png', res = 300, width = 5, height = 13, units = "in")
+age_50to64_plot
+dev.off()
+
+
+####select for age_65 patients####
+
+age_65_data<-df_data[df_data$Covariate == 'age_65']
+age_65<-age_65_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+#add line for missing states
+add_s1<-data.frame(State="ND")
+age_65<-bind_rows(age_65,add_s1)
+
+
+age_65$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+age_65$`AOR` <-  ifelse(is.na(age_65$OR),"",
+                                 sprintf("%.2f",
+                                     age_65$OR))
+
+#large CI for ND --> 12.74 (1.83 to 88.47)
+
+#order data descending
+age_65 <- age_65[order(State),]
+
+tm <- forest_theme(base_size = 15,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(age_65$`2.5 %`, na.rm=TRUE)
+max<-max(age_65$`97.5 %`, na.rm=TRUE)
+         
+age_65_plot<- forest(age_65[,c(5:6)],
+            est = age_65$OR,
+            lower = age_65$`2.5 %`, 
+            upper = age_65$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.02,4.2),
+            xlog = TRUE,
+            ticks_at = c(0.5, 1, 2, 3,4),
+            #arrow_lab = c("White Patients have Higher Risk", "age_65 Patients have Higher Risk"),
+           theme=tm)
+
+# age_65_plot<- add_underline(age_65_plot, part = "header")
+# # Insert text at top
+# age_65_plot <- insert_text(age_65_plot,
+#                  text = "Age (65+)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+age_65_plot <- edit_plot(age_65_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-age_65_data[age_65_data$`Pr(>|z|)` <=0.05,]
+sig_age_65_data<-sig
+
+age_all<-rbind(age_65_data,age_50to64_data,age_35to49_data)
+unique_allstate_age<-length(unique(age_all$State))
+
+
+age_sig<-rbind(sig_age_65_data,sig_age_50to64_data,sig_age_35to49_data)
+unique_states_age<-length(unique(age_sig$State))
+age_sig_per<-round(unique_states_age/unique_allstate_age*100, digits=1)
+
+
+state_sig = unique(sig$State)
+age_65$index <- 1:nrow(age_65)
+position_sig = age_65[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+age_65$index <- 1:nrow(age_65)
+position_OR_below = age_65[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+age_65_plot <- edit_plot(age_65_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+age_65$index <- 1:nrow(age_65)
+position_OR_over = age_65[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+age_65_plot <- edit_plot(age_65_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+# Print plot
+p<-plot(age_65_plot)
+ggsave(filename='age_65.svg', plot=p)
+
+# plot(age_65_plot)
+# png('age_65.svg', res = 300, width = 8, height = 18, units = "in")
+# age_65_plot
+# dev.off()
+
+```
+
+#year end
+```{r name-of-chunk, fig.width=10, fig.height=15}
+
+year_data<-df_data[df_data$Covariate == 'year_end']
+year<-year_data[, c("State", "OR","2.5 %","97.5 %"  )]
+
+
+year$` ` <- paste(rep(" ", 20), collapse = " ")
+# Create confidence interval column to display
+year$`AOR` <-  sprintf("%.2f",
+                                     year$OR)
+
+
+#order data descending
+year <- year[order(State),]
+
+tm <- forest_theme(base_size = 20,  ci_lwd =3, ci_pch =1, xaxis_lwd=2, refline_lwd=2)
+
+#find min and max
+min<-min(year$`2.5 %`)
+max<-max(year$`97.5 %`)
+
+
+         
+year_plot<- forest(year[,c(5:6)],
+            est = year$OR,
+            lower = year$`2.5 %`, 
+            upper = year$`97.5 %`,
+            ci_column = 1,
+            ref_line = 1,
+            xlim = c(0.65,1.35),
+            xlog = TRUE,
+            ticks_at = c(0.7, 1, 1.3),
+            #arrow_lab = c("White Patients have Higher Risk", "year Patients have Higher Risk"),
+           theme=tm)
+
+# year_plot<- add_underline(year_plot, part = "header")
+# # Insert text at top
+# year_plot <- insert_text(year_plot,
+#                  text = "Sex (year Patients)",
+#                  just = "left",
+#                  part = "header",
+#                  gp = gpar(fontface = "bold"))
+
+year_plot <- edit_plot(year_plot,  which = "background",
+               gp = gpar(fill = "white"))
+
+### Edit background of significant p-values
+
+#select states with p-value<0.05
+sig<-year_data[year_data$`Pr(>|z|)` <=0.05,]
+
+###count and % for sig states 
+year_allstates<-nrow(year_data)
+year_sig<-nrow(sig)
+year_sig_per<-round(year_sig/nrow(year_data)*100, digits=1)
+
+
+state_sig = unique(sig$State)
+year$index <- 1:nrow(year)
+position_sig = year[State %in% state_sig, ]
+index_vector <- c(position_sig$index)
+class(index_vector)
+
+#########
+##state OR<1
+OR_below<-sig[sig$OR <1,]
+state_OR_below = unique(OR_below$State)
+year$index <- 1:nrow(year)
+position_OR_below = year[State %in% state_OR_below, ]
+index_vector <- c(position_OR_below$index)
+class(index_vector) 
+year_plot <- edit_plot(year_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightpink"))
+
+##state OR>1
+OR_over<-sig[sig$OR >=1,]
+state_OR_over = unique(OR_over$State)
+year$index <- 1:nrow(year)
+position_OR_over = year[State %in% state_OR_over, ]
+index_vector <- c(position_OR_over$index)
+class(index_vector) 
+year_plot <- edit_plot(year_plot, row = index_vector, which = "background",
+               gp = gpar(fill = "lightblue"))
+
+# Print plot
+plot(year_plot)
+
+svg(file='year_end.svg')
+year_plot
+dev.off()
+
+
+```
+
+
+
